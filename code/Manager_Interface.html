@@ -38,26 +38,20 @@
             margin: 5px 0;
         }
 
-        /* 버튼 스타일 */
-        button {
-            padding: 10px 20px;
-            margin: 5px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
+        /* 상태 표시 스타일 */
+        .status {
+            font-size: 20px;
+            margin: 10px 0;
         }
 
-        /* 정상 버튼 스타일 */
-        #normal-btn {
-            color: white;
-            background-color: green;
+        /* 정상 상태 스타일 */
+        .normal {
+            color: green;
         }
 
-        /* 비정상 버튼 스타일 */
-        #abnormal-btn {
-            color: white;
-            background-color: red;
+        /* 비정상 상태 스타일 */
+        .abnormal {
+            color: gray; /* 비정상 상태의 회색 */
         }
 
         /* 문 열림 버튼 스타일 */
@@ -80,12 +74,10 @@
     <!-- 모니터링 섹션 -->
     <h2>모니터링</h2>
     <div class="info">
-        <p>현재 주차 대수: <span id="current-parking-count">10</span></p>
-        <p>주차 가능한 수: <span id="available-parking-count">5</span></p>
-        <p>
-            상태:
-            <button id="normal-btn">정상</button>
-            <button id="abnormal-btn">비정상</button>
+        <p>현재 주차 대수: </p>
+        <p>주차 가능한 수: </p>
+        <p class="status">
+            상태: <span id="status-indicator" class="normal">정상</span> <span id="status-indicator" class="normal">비상</span>
         </p>
     </div>
 
@@ -97,15 +89,20 @@
     </div>
 
     <script>
-        // 정상 버튼 클릭 시 동작
-        document.getElementById('normal-btn').onclick = function() {
-            alert('상태가 정상으로 변경되었습니다.');
-        };
+        // 상태 변경 함수
+        function setStatus(isNormal) {
+            const statusIndicator = document.getElementById('status-indicator');
+            if (isNormal) {
+                statusIndicator.textContent = '정상';
+                statusIndicator.className = 'normal';
+            } else {
+                statusIndicator.textContent = '비정상';
+                statusIndicator.className = 'abnormal';
+            }
+        }
 
-        // 비정상 버튼 클릭 시 동작
-        document.getElementById('abnormal-btn').onclick = function() {
-            alert('상태가 비정상으로 변경되었습니다.');
-        };
+        // 초기 상태를 정상으로 설정
+        setStatus(true);
 
         // 문 열림 버튼 클릭 시 동작
         document.getElementById('open-door-btn').onclick = function() {
