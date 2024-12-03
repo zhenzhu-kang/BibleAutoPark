@@ -14,7 +14,7 @@ LiquidCrystal_I2C lcd(0x27, 16, 2); // I2C 통신을 사용하는 16x2 LCD 디�
 // 전역 변수
 const int LED[3] = {5, 6, 7}; // LED 핀 설정 (5: 입출차 완료 LED, 6: 비상 LED, 7: 문 제어 LED)
 char carNum[5] = {}; // 차량 번호 저장 배열
-int status = 0; // 현재 프로그램 상태 (0: 기본 화면, 1: 입차, 2: 출차, 3: 사용 중)
+int status = 0; // 현재 프로그램 상태 (0: 기본 화면, 1: 입차, 2: 출차)
 int cursor = 0; // 차량 번호 입력 시 커서 위치
 int cars[10] = {}; // 최대 10대 차량 정보를 저장
 int maxspot = 10; // 주차장 최대 수용량
@@ -30,8 +30,10 @@ char pass[] = "66666666"; // WiFi 비밀번호
 
 void setup() {
   // LED 설정
-  for (int i = 0; i < 3; i++) pinMode(LED[i], OUTPUT);
-  for (int i = 0; i < 3; i++) digitalWrite(LED[i], LOW);
+  for (int i = 0; i < 3; i++) {
+    pinMode(LED[i], OUTPUT);
+    digitalWrite(LED[i], LOW);
+  }
 
   // 센서 설정
   pinMode(sensor, INPUT);
@@ -40,20 +42,10 @@ void setup() {
   Serial.begin(9600); // 디버깅용 시리얼 통신
   Serial1.begin(9600); // ESP8266 통신
   WiFi.init(&Serial1);
-
+  
   // WiFi 연결
-  unsigned long startAttemptTime = millis();
-  while (wifiStatus != WL_CONNECTED) {
-    if (millis() - startAttemptTime > 10000) {
-      Serial.println("WiFi 연결 실패");
-      break;
-    }
-    wifiStatus = WiFi.begin(ssid, pass);
-  }
-  if (wifiStatus == WL_CONNECTED) {
-    Serial.println("WiFi 연결 성공");
-    printWifiStatus();
-  }
+  connectToWiFi();
+
   server.begin();
 
   // LCD 초기화
@@ -71,7 +63,7 @@ void loop() {
   if (status == 1 && inputKey == 'D') inCar2();
   if (status == 2 && inputKey == 'D') outCar2();
 
-   // HTTP 요청 처리
+  // HTTP 요청 처리
   WiFiEspClient client = server.available();
   if (client) {
     String request = "";
@@ -81,19 +73,7 @@ void loop() {
         request += c;
 
         if (c == '\n' && request.endsWith("\r\n\r\n")) {
-          if (request.indexOf("GET /open") != -1) {
-            Serial.println("문 열림 요청 수신");
-            digitalWrite(LED[2], HIGH); // 문 열림 LED 켜기
-          }
-          if (request.indexOf("GET /close") != -1) {
-            Serial.println("문 닫힘 요청 수신");
-            digitalWrite(LED[2], LOW); // 문 닫힘 LED 끄기
-          }
-          if (request.indexOf("GET /status") != -1) {
-            sendJSONResponse(client); // JSON 응답을 보내는 함수 호출
-          } else {
-            sendHTMLResponse(client); // HTML 응답을 보내는 함수 호출
-          }
+          handleHTTPRequests(request, client);
           break;
         }
       }
@@ -104,16 +84,100 @@ void loop() {
   }
 }
 
+void connectToWiFi() {
+  unsigned long startAttemptTime = millis();
+  int attempt = 0; // 연결 시도 횟수
+  const int maxAttempts = 5; // 최대 시도 횟수
+
+  wifiStatus = WiFi.begin(ssid, pass); // 초기 WiFi 연결 시도
+
+  while (wifiStatus != WL_CONNECTED) {
+    if (millis() - startAttemptTime > 10000) { // 10초 경과 시
+      attempt++;
+      Serial.print("WiFi 연결 실패, 시도 횟수: ");
+      Serial.println(attempt);
+      if (attempt < maxAttempts) {
+        Serial.println("5초 후 재시도...");
+        delay(5000); // 5초 대기
+        wifiStatus = WiFi.begin(ssid, pass); // 다시 연결 시도
+      } else {
+        Serial.println("최대 시도 횟수 초과. WiFi 연결 실패.");
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("WiFi 연결 실패");
+        lcd.setCursor(0, 1);
+        lcd.print("재시도 필요");
+        break; // 최대 시도 횟수 초과 시 루프 종료
+      }
+      startAttemptTime = millis(); // 시작 시간 재설정
+    }
+  }
+
+  if (wifiStatus == WL_CONNECTED) {
+    Serial.println("WiFi 연결 성공");
+    printWifiStatus();
+  }
+}
+
 void sensing() {
   val = digitalRead(sensor);
   if (val == HIGH) {
     digitalWrite(LED[1], HIGH);
     Serial.println("비상 감지");
+    displayEmergencyMessage();
   } else {
     digitalWrite(LED[1], LOW);
     Serial.println("정상 상태");
   }
   delay(1000);
+}
+
+void displayEmergencyMessage() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("비상 감지");
+  lcd.setCursor(0, 1);
+  lcd.print("확인 필요");
+}
+
+void handleHTTPRequests(String request, WiFiEspClient client) {
+  Serial.println("수신된 요청: " + request); // 수신된 요청 로그
+
+  // 요청 메소드 확인
+  if (request.indexOf("GET") != -1) {
+    if (request.indexOf("GET /open") != -1) {
+      Serial.println("문 열림 요청 수신");
+      digitalWrite(LED[2], HIGH); // 문 열림 LED 켜기
+      sendResponse(client, 200, "문이 열렸습니다."); // 200 OK 응답
+    } else if (request.indexOf("GET /close") != -1) {
+      Serial.println("문 닫힘 요청 수신");
+      digitalWrite(LED[2], LOW); // 문 닫힘 LED 끄기
+      sendResponse(client, 200, "문이 닫혔습니다."); // 200 OK 응답
+    } else if (request.indexOf("GET /status") != -1) {
+      sendJSONResponse(client); // JSON 응답을 보내는 함수 호출
+    } else {
+      sendResponse(client, 404, "잘못된 요청입니다."); // 404 Not Found 응답
+    }
+  } else {
+    sendResponse(client, 405, "허용되지 않은 메소드입니다."); // 405 Method Not Allowed 응답
+  }
+}
+
+void sendResponse(WiFiEspClient client, int statusCode, String message) {
+  client.print("HTTP/1.1 " + String(statusCode) + " " + getStatusMessage(statusCode) + "\r\n");
+  client.print("Content-Type: text/plain\r\n");
+  client.print("Connection: close\r\n");
+  client.print("\r\n");
+  client.print(message);
+}
+
+String getStatusMessage(int statusCode) {
+  switch (statusCode) {
+    case 200: return "OK";
+    case 404: return "Not Found";
+    case 405: return "Method Not Allowed";
+    default: return "Unknown Status";
+  }
 }
 
 void sendHTMLResponse(WiFiEspClient client) {
@@ -123,8 +187,6 @@ void sendHTMLResponse(WiFiEspClient client) {
   client.print("\r\n");
 }
 
-
-// JSON 응답을 보내는 함수
 void sendJSONResponse(WiFiEspClient client) {
   client.print("HTTP/1.1 200 OK\r\n");
   client.print("Content-Type: application/json\r\n");
@@ -141,7 +203,7 @@ void sendJSONResponse(WiFiEspClient client) {
   client.print("\"status\": \"");
 
   // 비상 상태에 따른 조건
-  if (val == 1) {
+  if (val == HIGH) {
     client.print("비상");  // 비상 상태
   } else {
     client.print("정상");  // 정상 상태
@@ -194,19 +256,33 @@ void inPut() {
 }
 
 void inCar2() {
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Wellcome");
-  carspot--;
-  delay(3000);
+  if (carspot > 0) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Wellcome");
+    carspot--;
+    delay(3000);
+  } else {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("No Space!");
+    delay(3000);
+  }
   status = 0;
 }
 
 void outCar2() {
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Bye Bye");
-  carspot++;
-  delay(3000);
+  if (carspot < maxspot) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Bye Bye");
+    carspot++;
+    delay(3000);
+  } else {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Full!");
+    delay(3000);
+  }
   status = 0;
 }
