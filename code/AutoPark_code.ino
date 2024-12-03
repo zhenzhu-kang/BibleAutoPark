@@ -20,8 +20,9 @@ const int LED[2] = {5, 6}; // LED 핀 설정 (5: 차량 입출차 완료 LED, 6:
 char carNum[5] = {}; // 차량 번호를 저장할 배열 (최대 4자리와 끝 문자를 위한 공간)
 int status = 0; // 프로그램 상태를 저장하는 변수 (0: 기본 화면, 1: 입차, 2: 출차, 3: 사용 중)
 int cursor = 0; // 차량 번호 입력 시 LCD의 커서 위치를 나타내는 변수
-int parkingSpot[1] = {}; // 주차 자리 상태를 저장하는 배열 (1개의 주차 자리만 처리)
 int cars[1] = {}; // 주차된 차량 정보를 저장하는 배열 (1개의 차량 정보만 처리)
+int maxspot = 10; //주차장 최대 수용량
+int carspot = 10; // 현재 남은 차량 자리 수
 char inputKey; // 키보드로부터 입력된 키 값을 저장하는 변수
 
 // 적외선 센서 관련 변수
@@ -148,9 +149,24 @@ void sensing() {
 //LCD_메뉴선택 함수
 void wellCome(){
 	lcd.setCursor(0,0);
+    lcd.clear();
+
+  	lcd.setCursor(0,0);
+  	lcd.print("Car In Spot:");
+  	lcd.print(carspot);
+
+  	lcd.setCursor(0,1);
+  	lcd.print("Spare spot:");
+  	lcd.print(10-carspot);
+  	delay(3000);  
+
+    lcd.clear();
+
+	  lcd.setCursor(0,0);
     lcd.print("choise menu");
     lcd.setCursor(0,1);
-    lcd.print("1:in  2:out");
+    lcd.print("1:in 2:out");
+  	delay(3000); 
 }
 
 //입차 선택(1선택 후 A로 결정) 함수
@@ -183,7 +199,7 @@ void inCar2(){
     lcd.setCursor(0,0);
     lcd.print("WellCome");
     
-    for(int i=0; i<1;i++){
+    for(int i=0; i<maxspot; i++){
       if(!cars[i]){
         cars[i] = i+1;
         break;
@@ -201,8 +217,14 @@ void inCar2(){
     lcd.print("Back: B");
 
     
-    digitalWrite(LED[0],1);
-    digitalWrite(LED[1],0);
+    digitalWrite(LED[0],0);
+  	for(int i=0;i<5;i++){
+      digitalWrite(LED[1],1);
+      delay(500);
+      digitalWrite(LED[1],0);
+  	}
+  	digitalWrite(LED[1],1);
+  	carspot -=1;
     status = 3;
 }
 
@@ -226,7 +248,7 @@ void outCar2(){
      Serial.println(carNum);   	
      lcd.clear(); 
      
-     for(int i=0; i<1;i++){ 
+     for(int i=0; i<maxspot; i++){ 
        if(cars[i] == i+1){    
          cars[i] = 0; 
          lcd.setCursor(0,0);
@@ -243,8 +265,13 @@ void outCar2(){
     
     
     digitalWrite(LED[0],0);
-    digitalWrite(LED[1],1);
-    status = 3;
+    for(int i=0;i<5;i++){
+      digitalWrite(LED[1],1);
+      delay(500);
+      digitalWrite(LED[1],0);
+  	}
+  	digitalWrite(LED[1],1);
+  	carspot +=1;
 }
 
 //키보드 입력 값 받는 함수
