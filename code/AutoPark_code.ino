@@ -71,7 +71,7 @@ void loop() {
   if (status == 1 && inputKey == 'D') inCar2();
   if (status == 2 && inputKey == 'D') outCar2();
 
-  // HTTP 요청 처리
+   // HTTP 요청 처리
   WiFiEspClient client = server.available();
   if (client) {
     String request = "";
@@ -89,7 +89,11 @@ void loop() {
             Serial.println("문 닫힘 요청 수신");
             digitalWrite(LED[2], LOW); // 문 닫힘 LED 끄기
           }
-          sendHTMLResponse(client);
+          if (request.indexOf("GET /status") != -1) {
+            sendJSONResponse(client); // JSON 응답을 보내는 함수 호출
+          } else {
+            sendHTMLResponse(client); // HTML 응답을 보내는 함수 호출
+          }
           break;
         }
       }
@@ -114,7 +118,7 @@ void sensing() {
 
 void sendHTMLResponse(WiFiEspClient client) {
   client.print("HTTP/1.1 301 Moved Permanently\r\n");
-  client.print("Location: https://username.github.io/ParkingTower/\r\n"); // GitHub Pages URL
+  client.print("Location: https://github.com/zhenzhu-kang/BibleAutoPark/blob/8c16895c0cefa2adc0fc0d2f59b3773e79713c0f/code/index.html\r\n"); // GitHub Pages URL
   client.print("Connection: close\r\n");
   client.print("\r\n");
 }
