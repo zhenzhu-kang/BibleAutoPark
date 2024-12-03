@@ -113,45 +113,38 @@ void sensing() {
 }
 
 void sendHTMLResponse(WiFiEspClient client) {
-  //HTTP 요청
-  client.print("HTTP/1.1 200 OK\r\n");
-  client.print("Content-Type: text/html\r\n");
+  client.print("HTTP/1.1 301 Moved Permanently\r\n");
+  client.print("Location: https://username.github.io/ParkingTower/\r\n"); // GitHub Pages URL
   client.print("Connection: close\r\n");
   client.print("\r\n");
-	//HTML 전송
-  client.println("<!DOCTYPE html>");
-  client.println("<html lang=\"ko\">");
-  client.println("<head>");
-  client.println("<meta charset=\"UTF-8\">");
-  client.println("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
-  client.println("<title>Bible Auto Parking Tower</title>");
-  client.println("<style>");
-  client.println("body { font-family: Arial, sans-serif; text-align: center; background-color: #f5f5f5; }");
-  client.println(".info { margin: 20px; }");
-  client.println("</style>");
-  client.println("</head>");
-  client.println("<body>");
-  client.println("<h1>Bible Auto Parking Tower</h1>");
-  client.println("<div class=\"info\">");
-  client.print("<p>현재 주차 대수: ");
-  client.print(maxspot - carspot);
-  client.println("</p>");
-  client.print("<p>주차 가능한 수: ");
+}
+
+
+// JSON 응답을 보내는 함수
+void sendJSONResponse(WiFiEspClient client) {
+  client.print("HTTP/1.1 200 OK\r\n");
+  client.print("Content-Type: application/json\r\n");
+  client.print("Connection: close\r\n");
+  client.print("\r\n");
+
+  client.print("{");
+  client.print("\"maxspot\": ");
+  client.print(maxspot);
+  client.print(", ");
+  client.print("\"carspot\": ");
   client.print(carspot);
-  client.println("</p>");
-  client.println("</div>");
-  client.println("<div class=\"info\">");
-  client.println("<button id=\"open-door-btn\">문 열림</button>");
-  client.println("<button id=\"close-door-btn\">문 닫힘</button>");
-  client.println("</div>");
-  client.println("<script>");
-  client.println("document.getElementById('open-door-btn').onclick = function() {");
-  client.println("  alert('문이 열렸습니다.'); fetch('/open'); };");
-  client.println("document.getElementById('close-door-btn').onclick = function() {");
-  client.println("  alert('문이 닫혔습니다.'); fetch('/close'); };");
-  client.println("</script>");
-  client.println("</body>");
-  client.println("</html>");
+  client.print(", ");
+  client.print("\"status\": \"");
+
+  // 비상 상태에 따른 조건
+  if (val == 1) {
+    client.print("비상");  // 비상 상태
+  } else {
+    client.print("정상");  // 정상 상태
+  }
+
+  client.print("\"");
+  client.print("}");
 }
 
 void printWifiStatus() {
@@ -166,7 +159,7 @@ void wellCome() {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Car In Spot:");
-  lcd.print(maxspot - carspot);
+  lcd.print(maxspot - carspot); 
   lcd.setCursor(0, 1);
   lcd.print("Spare spot:");
   lcd.print(carspot);
