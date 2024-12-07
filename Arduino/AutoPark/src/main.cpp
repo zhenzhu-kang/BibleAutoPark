@@ -29,6 +29,14 @@ WiFiEspServer server(80); // HTTP 서버
 char ssid[] = "zhenzhu"; // WiFi SSID
 char pass[] = "66666666"; // WiFi 비밀번호
 
+void printWifiStatus() {
+  Serial.print("SSID: ");
+  Serial.println(WiFi.SSID());
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+  Serial.println("웹 페이지를 보려면 브라우저에서 IP 주소를 입력하세요.");
+}
+
 void connectToWiFi() {
   unsigned long startAttemptTime = millis();
   int attempt = 0; // 연결 시도 횟수
@@ -59,6 +67,14 @@ void connectToWiFi() {
   }
 }
 
+void displayEmergencyMessage() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("비상 감지");
+  lcd.setCursor(0, 1);
+  lcd.print("확인 필요");
+}
+
 void sensing() {
   val = digitalRead(sensor);
   if (val == HIGH) {
@@ -72,34 +88,12 @@ void sensing() {
   delay(1000);
 }
 
-void displayEmergencyMessage() {
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("비상 감지");
-  lcd.setCursor(0, 1);
-  lcd.print("확인 필요");
-}
-
-void handleHTTPRequests(String request, WiFiEspClient client) {
-  Serial.println("수신된 요청: " + request); // 수신된 요청 로그
-
-  // 요청 메소드 확인
-  if (request.indexOf("GET") != -1) {
-    if (request.indexOf("GET /open") != -1) {
-      Serial.println("문 열림 요청 수신");
-      digitalWrite(LED[2], HIGH); // 문 열림 LED 켜기
-      sendResponse(client, 200, "문이 열렸습니다."); // 200 OK 응답
-    } else if (request.indexOf("GET /close") != -1) {
-      Serial.println("문 닫힘 요청 수신");
-      digitalWrite(LED[2], LOW); // 문 닫힘 LED 끄기
-      sendResponse(client, 200, "문이 닫혔습니다."); // 200 OK 응답
-    } else if (request.indexOf("GET /status") != -1) {
-      sendJSONResponse(client); // JSON 응답을 보내는 함수 호출
-    } else {
-      sendResponse(client, 404, "잘못된 요청입니다."); // 404 Not Found 응답
-    }
-  } else {
-    sendResponse(client, 405, "허용되지 않은 메소드입니다."); // 405 Method Not Allowed 응답
+String getStatusMessage(int statusCode) {
+  switch (statusCode) {
+    case 200: return "OK";
+    case 404: return "Not Found";
+    case 405: return "Method Not Allowed";
+    default: return "Unknown Status";
   }
 }
 
@@ -111,14 +105,6 @@ void sendResponse(WiFiEspClient client, int statusCode, String message) {
   client.print(message);
 }
 
-String getStatusMessage(int statusCode) {
-  switch (statusCode) {
-    case 200: return "OK";
-    case 404: return "Not Found";
-    case 405: return "Method Not Allowed";
-    default: return "Unknown Status";
-  }
-}
 
 void sendHTMLResponse(WiFiEspClient client) {
   client.print("HTTP/1.1 301 Moved Permanently\r\n");
@@ -153,12 +139,27 @@ void sendJSONResponse(WiFiEspClient client) {
   client.print("}");
 }
 
-void printWifiStatus() {
-  Serial.print("SSID: ");
-  Serial.println(WiFi.SSID());
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.localIP());
-  Serial.println("웹 페이지를 보려면 브라우저에서 IP 주소를 입력하세요.");
+void handleHTTPRequests(String request, WiFiEspClient client) {
+  Serial.println("수신된 요청: " + request); // 수신된 요청 로그
+
+  // 요청 메소드 확인
+  if (request.indexOf("GET") != -1) {
+    if (request.indexOf("GET /open") != -1) {
+      Serial.println("문 열림 요청 수신");
+      digitalWrite(LED[2], HIGH); // 문 열림 LED 켜기
+      sendResponse(client, 200, "문이 열렸습니다."); // 200 OK 응답
+    } else if (request.indexOf("GET /close") != -1) {
+      Serial.println("문 닫힘 요청 수신");
+      digitalWrite(LED[2], LOW); // 문 닫힘 LED 끄기
+      sendResponse(client, 200, "문이 닫혔습니다."); // 200 OK 응답
+    } else if (request.indexOf("GET /status") != -1) {
+      sendJSONResponse(client); // JSON 응답을 보내는 함수 호출
+    } else {
+      sendResponse(client, 404, "잘못된 요청입니다."); // 404 Not Found 응답
+    }
+  } else {
+    sendResponse(client, 405, "허용되지 않은 메소드입니다."); // 405 Method Not Allowed 응답
+  }
 }
 
 //LCD_메뉴선택 함수
