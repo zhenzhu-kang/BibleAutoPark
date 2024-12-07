@@ -29,79 +29,6 @@ WiFiEspServer server(80); // HTTP 서버
 char ssid[] = "zhenzhu"; // WiFi SSID
 char pass[] = "66666666"; // WiFi 비밀번호
 
-void setup() {
- // LED 핀을 출력 모드로 설정
-  for (int i = 0; i < 2; i++) pinMode(LED[i], OUTPUT);
-  for (int i = 0; i < 2; i++) analogWrite(LED[i], 0); // LED 초기화 (꺼진 상태)
-
-  // 차량 번호 초기화 (공백으로 설정)
-  for (int i = 0; i < 4; i++) carNum[i] = ' ';
-  
-  // 센서 설정
-  pinMode(sensor, INPUT); 
-
-  //Wifi 연결 세팅
-  Serial.begin(9600); // 디버깅을 위한 시리얼 통신 초기화
-  Serial1.begin(9600); // ESP 모듈과 통신을 위한 시리얼 초기화
-  WiFi.init(&Serial1); // ESP 모듈 초기화
-
-  // WiFi 연결
-  connectToWiFi();
-
-  server.begin();
-
-  // LCD 초기화
-  lcd.begin(16, 2); // LCD 크기 설정 (16x2)
-  lcd.init();
-  lcd.backlight();
-  lcd.clear();
-}
-
-void loop() {
-  inPut(); // 사용자 입력 처리
-
-  if (status == 0) wellCome(); // 기본 화면 표시
-  
-  // 입차 선택 상태 (차량 번호의 첫 번째 문자와 두 번째 문자가 조건에 부합할 경우)
-  if (carNum[0] == '1' && carNum[1] == 'A' && status == 0) inCar();
-  
-  // 차량 번호 입력 후 입차 처리
-  if (status == 1 && inputKey == 'D') inCar2();
-  
-  // 출차 선택 상태 (차량 번호의 첫 번째 문자와 두 번째 문자가 조건에 부합할 경우)
-  if (carNum[0] == '2' && carNum[1] == 'A' && status == 0) outCar();
-  
-  // 차량 번호 입력 후 출차 처리
-  if (status == 2 && inputKey == 'D') outCar2();
-
-  sensing(); // 센서 상태 확인
-
-  // 상태별 동작
-  if (status == 0) wellCome();
-  if (status == 1 && inputKey == 'D') inCar2();
-  if (status == 2 && inputKey == 'D') outCar2();
-
-  // HTTP 요청 처리
-  WiFiEspClient client = server.available();
-  if (client) {
-    String request = "";
-    while (client.connected()) {
-      if (client.available()) {
-        char c = client.read();
-        request += c;
-
-        if (c == '\n' && request.endsWith("\r\n\r\n")) {
-          handleHTTPRequests(request, client);
-          break;
-        }
-      }
-    }
-    delay(10);
-    client.stop();
-    Serial.println("클라이언트 연결 종료");
-  }
-}
-
 void connectToWiFi() {
   unsigned long startAttemptTime = millis();
   int attempt = 0; // 연결 시도 횟수
@@ -396,4 +323,77 @@ void inPut(){
     lcd.setCursor(cursor,1);
     lcd.print(' '); 
   } 
+}
+
+void setup() {
+ // LED 핀을 출력 모드로 설정
+  for (int i = 0; i < 2; i++) pinMode(LED[i], OUTPUT);
+  for (int i = 0; i < 2; i++) analogWrite(LED[i], 0); // LED 초기화 (꺼진 상태)
+
+  // 차량 번호 초기화 (공백으로 설정)
+  for (int i = 0; i < 4; i++) carNum[i] = ' ';
+  
+  // 센서 설정
+  pinMode(sensor, INPUT); 
+
+  //Wifi 연결 세팅
+  Serial.begin(9600); // 디버깅을 위한 시리얼 통신 초기화
+  Serial1.begin(9600); // ESP 모듈과 통신을 위한 시리얼 초기화
+  WiFi.init(&Serial1); // ESP 모듈 초기화
+
+  // WiFi 연결
+  connectToWiFi();
+
+  server.begin();
+
+  // LCD 초기화
+  lcd.begin(16, 2); // LCD 크기 설정 (16x2)
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+}
+
+void loop() {
+  inPut(); // 사용자 입력 처리
+
+  if (status == 0) wellCome(); // 기본 화면 표시
+  
+  // 입차 선택 상태 (차량 번호의 첫 번째 문자와 두 번째 문자가 조건에 부합할 경우)
+  if (carNum[0] == '1' && carNum[1] == 'A' && status == 0) inCar();
+  
+  // 차량 번호 입력 후 입차 처리
+  if (status == 1 && inputKey == 'D') inCar2();
+  
+  // 출차 선택 상태 (차량 번호의 첫 번째 문자와 두 번째 문자가 조건에 부합할 경우)
+  if (carNum[0] == '2' && carNum[1] == 'A' && status == 0) outCar();
+  
+  // 차량 번호 입력 후 출차 처리
+  if (status == 2 && inputKey == 'D') outCar2();
+
+  sensing(); // 센서 상태 확인
+
+  // 상태별 동작
+  if (status == 0) wellCome();
+  if (status == 1 && inputKey == 'D') inCar2();
+  if (status == 2 && inputKey == 'D') outCar2();
+
+  // HTTP 요청 처리
+  WiFiEspClient client = server.available();
+  if (client) {
+    String request = "";
+    while (client.connected()) {
+      if (client.available()) {
+        char c = client.read();
+        request += c;
+
+        if (c == '\n' && request.endsWith("\r\n\r\n")) {
+          handleHTTPRequests(request, client);
+          break;
+        }
+      }
+    }
+    delay(10);
+    client.stop();
+    Serial.println("클라이언트 연결 종료");
+  }
 }
