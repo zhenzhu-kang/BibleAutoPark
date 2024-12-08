@@ -17,6 +17,8 @@ char inputKey; // 키보드 입력값 저장
 const int sensor = 9; // 적외선 센서 핀
 int val = 0; // 센서 값
 
+RingBuffer buf(8);
+
 SoftwareSerial EspSerial(2, 3); // RX, TX 핀 설정
 char ssid[] = "zhenzhu"; // WiFi SSID
 char password[] = "66666666"; // WiFi 비밀번호
@@ -277,13 +279,13 @@ void loop() {
 
   WiFiEspClient client = server.available(); // 클라이언트 연결 확인
 
-  if (client) {
+  if (client) {           // loop while the client's connected                               // if you get a client,
+    Serial.println("New client");             // print a message out the serial port
+    buf.init();                               // initialize the circular buffer
     while (client.connected()) {              // loop while the client's connected
-      if (client.available()) {    
-        Serial.println("클라이언트 연결됨");
-        String request = client.readStringUntil('\r');
-        Serial.println(request);
-        client.flush();
+      if (client.available()) {               // if there's bytes to read from the client,
+        char c = client.read();               // read a byte, then
+        buf.push(c);                          // push it to the ring buffer
         // HTML 페이지 응답
         client.print(
           "HTTP/1.1 200 OK\r\n"
@@ -293,6 +295,7 @@ void loop() {
           "\r\n");
         client.println("<!DOCTYPE HTML>");
         client.println("<html>");
+        client.println("<meta http-equiv=\"refresh\" content=\"3\">");
         client.println("<h1>Parking Tower</h1>");
         client.println("<h2>Monitoring</h2>");
         client.println("<p>Parked vehicle:");
@@ -302,10 +305,13 @@ void loop() {
         client.println(carspot); 
         client.println("ea</p>");
         client.println("<p>situation:");
-        if(val == HIGH) client.println("normal</p>");
-        else client.println("Emergency</p>");
+        if(val == HIGH) client.println("Emergency</p>");
+        else client.println("normal</p>");
         client.println("<h2>Door control</h2>");
-        if(val == HIGH) client.println("<p><button>Door Open</button></p>");
+        if(val == HIGH) {
+          client.println("<p><a href=/D><button>Door Open</a></button></p>");
+           if (buf.endsWith("GET /M")) val == LOW;
+        }
         else client.println("<p><button>Door Close</button></p>");
         client.println("</html>");
 
