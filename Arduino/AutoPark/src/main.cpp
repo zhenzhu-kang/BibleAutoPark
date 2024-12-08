@@ -1,11 +1,5 @@
-// ESP8266 WiFi 모듈 라이브러리
-#include "WiFiEsp.h"
-
-// 하드웨어 시리얼이 포함되어 있지 않다면 #endif 전까지의 코드를 실행
-#ifndef HAVE_HWSERIAL1
-#include "SoftwareSerial.h"
-SoftwareSerial Serial1(2, 3); // RX(수신), TX(송신) 핀을 2번과 3번으로 설정하여 소프트웨어 시리얼 초기화
-#endif
+#include <WiFiEsp.h>
+#include <SoftwareSerial.h>
 
 // LCD 제어 라이브러리
 #include <LiquidCrystal_I2C.h>
@@ -23,56 +17,31 @@ char inputKey; // 키보드 입력값 저장
 const int sensor = 9; // 적외선 센서 핀
 int val = 0; // 센서 값
 
-int wifiStatus = WL_IDLE_STATUS; // WiFi 상태
+SoftwareSerial EspSerial(2, 3); // RX, TX 핀 설정
+char ssid[] = "zhenzhu"; // WiFi SSID
+char password[] = "66666666"; // WiFi 비밀번호
 WiFiEspServer server(80); // HTTP 서버
 
-char ssid[] = "zhenzhu"; // WiFi SSID
-char pass[] = "66666666"; // WiFi 비밀번호
-
-void printWifiStatus() {
-  Serial.print("SSID: ");
-  Serial.println(WiFi.SSID());
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.localIP());
-  Serial.println("웹 페이지를 보려면 브라우저에서 IP 주소를 입력하세요.");
-}
 
 void connectToWiFi() {
-  unsigned long startAttemptTime = millis();
-  int attempt = 0; // 연결 시도 횟수
-  const int maxAttempts = 5; // 최대 시도 횟수
-
-  wifiStatus = WiFi.begin(ssid, pass); // 초기 WiFi 연결 시도
-
-  while (wifiStatus != WL_CONNECTED) {
-    if (millis() - startAttemptTime > 10000) { // 10초 경과 시
-      attempt++;
-      Serial.print("WiFi 연결 실패, 시도 횟수: ");
-      Serial.println(attempt);
-      if (attempt < maxAttempts) {
-        Serial.println("5초 후 재시도...");
-        delay(5000); // 5초 대기
-        wifiStatus = WiFi.begin(ssid, pass); // 다시 연결 시도
-      } else {
-        Serial.println("최대 시도 횟수 초과. WiFi 연결 실패.");
-        break; // 최대 시도 횟수 초과 시 루프 종료
-      }
-      startAttemptTime = millis(); // 시작 시간 재설정
-    }
+  // WiFi 연결
+  if (WiFi.status() == WL_NO_SHIELD) {
+    Serial.println("WiFi 모듈을 찾을 수 없습니다.");
+    while (true);
   }
 
-  if (wifiStatus == WL_CONNECTED) {
-    Serial.println("WiFi 연결 성공");
-    printWifiStatus();
+  Serial.print("WiFi에 연결 중...");
+  while (WiFi.status() != WL_CONNECTED) {
+    WiFi.begin(ssid, password);
+    delay(500);
+    Serial.print(".");
   }
-}
 
-void displayEmergencyMessage() {
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("비상 감지");
-  lcd.setCursor(0, 1);
-  lcd.print("확인 필요");
+  Serial.println("\nWiFi 연결 성공!");
+  Serial.print("IP 주소: ");
+  Serial.println(WiFi.localIP());
+
+  server.begin(); // 서버 시작
 }
 
 void sensing() {
@@ -80,7 +49,7 @@ void sensing() {
   if (val == HIGH) {
     digitalWrite(LED[1], HIGH);
     Serial.println("비상 감지");
-    displayEmergencyMessage();
+
   } else {
     digitalWrite(LED[1], LOW);
     Serial.println("정상 상태");
@@ -88,79 +57,6 @@ void sensing() {
   delay(1000);
 }
 
-String getStatusMessage(int statusCode) {
-  switch (statusCode) {
-    case 200: return "OK";
-    case 404: return "Not Found";
-    case 405: return "Method Not Allowed";
-    default: return "Unknown Status";
-  }
-}
-
-void sendResponse(WiFiEspClient client, int statusCode, String message) {
-  client.print("HTTP/1.1 " + String(statusCode) + " " + getStatusMessage(statusCode) + "\r\n");
-  client.print("Content-Type: text/plain\r\n");
-  client.print("Connection: close\r\n");
-  client.print("\r\n");
-  client.print(message);
-}
-
-
-void sendHTMLResponse(WiFiEspClient client) {
-  client.print("HTTP/1.1 301 Moved Permanently\r\n");
-  client.print("Location: https://github.com/zhenzhu-kang/BibleAutoPark/blob/8c16895c0cefa2adc0fc0d2f59b3773e79713c0f/code/index.html\r\n"); // GitHub Pages URL
-  client.print("Connection: close\r\n");
-  client.print("\r\n");
-}
-
-void sendJSONResponse(WiFiEspClient client) {
-  client.print("HTTP/1.1 200 OK\r\n");
-  client.print("Content-Type: application/json\r\n");
-  client.print("Connection: close\r\n");
-  client.print("\r\n");
-
-  client.print("{");
-  client.print("\"maxspot\": ");
-  client.print(maxspot);
-  client.print(", ");
-  client.print("\"carspot\": ");
-  client.print(carspot);
-  client.print(", ");
-  client.print("\"status\": \"");
-
-  // 비상 상태에 따른 조건
-  if (val == HIGH) {
-    client.print("비상");  // 비상 상태
-  } else {
-    client.print("정상");  // 정상 상태
-  }
-
-  client.print("\"");
-  client.print("}");
-}
-
-void handleHTTPRequests(String request, WiFiEspClient client) {
-  Serial.println("수신된 요청: " + request); // 수신된 요청 로그
-
-  // 요청 메소드 확인
-  if (request.indexOf("GET") != -1) {
-    if (request.indexOf("GET /open") != -1) {
-      Serial.println("문 열림 요청 수신");
-      digitalWrite(LED[2], HIGH); // 문 열림 LED 켜기
-      sendResponse(client, 200, "문이 열렸습니다."); // 200 OK 응답
-    } else if (request.indexOf("GET /close") != -1) {
-      Serial.println("문 닫힘 요청 수신");
-      digitalWrite(LED[2], LOW); // 문 닫힘 LED 끄기
-      sendResponse(client, 200, "문이 닫혔습니다."); // 200 OK 응답
-    } else if (request.indexOf("GET /status") != -1) {
-      sendJSONResponse(client); // JSON 응답을 보내는 함수 호출
-    } else {
-      sendResponse(client, 404, "잘못된 요청입니다."); // 404 Not Found 응답
-    }
-  } else {
-    sendResponse(client, 405, "허용되지 않은 메소드입니다."); // 405 Method Not Allowed 응답
-  }
-}
 
 //LCD_메뉴선택 함수
 void wellCome(){
@@ -339,8 +235,8 @@ void setup() {
 
   //Wifi 연결 세팅
   Serial.begin(9600); // 디버깅을 위한 시리얼 통신 초기화
-  Serial1.begin(9600); // ESP 모듈과 통신을 위한 시리얼 초기화
-  WiFi.init(&Serial1); // ESP 모듈 초기화
+  EspSerial.begin(9600);
+  WiFi.init(&EspSerial);   // ESP-01 초기화
 
   // WiFi 연결
   connectToWiFi();
@@ -353,6 +249,7 @@ void setup() {
   lcd.backlight();
   lcd.clear();
 }
+
 
 void loop() {
   inPut(); // 사용자 입력 처리
@@ -378,23 +275,43 @@ void loop() {
   if (status == 1 && inputKey == 'D') inCar2();
   if (status == 2 && inputKey == 'D') outCar2();
 
-  // HTTP 요청 처리
-  WiFiEspClient client = server.available();
-  if (client) {
-    String request = "";
-    while (client.connected()) {
-      if (client.available()) {
-        char c = client.read();
-        request += c;
+  WiFiEspClient client = server.available(); // 클라이언트 연결 확인
 
-        if (c == '\n' && request.endsWith("\r\n\r\n")) {
-          handleHTTPRequests(request, client);
-          break;
-        }
+  if (client) {
+    while (client.connected()) {              // loop while the client's connected
+      if (client.available()) {    
+        Serial.println("클라이언트 연결됨");
+        String request = client.readStringUntil('\r');
+        Serial.println(request);
+        client.flush();
+        // HTML 페이지 응답
+        client.print(
+          "HTTP/1.1 200 OK\r\n"
+          "Content-Type: text/html\r\n"
+          "Connection: close\r\n"  
+          "Refresh: 20\r\n"        // refresh the page automatically every 20 se
+          "\r\n");
+        client.println("<!DOCTYPE HTML>");
+        client.println("<html>");
+        client.println("<h1>Parking Tower</h1>");
+        client.println("<h2>Monitoring</h2>");
+        client.println("<p>Parked vehicle:");
+        client.println(maxspot); 
+        client.println("ea</p>");
+        client.println("<p>Parking available:");
+        client.println(carspot); 
+        client.println("ea</p>");
+        client.println("<p>situation:");
+        if(val == HIGH) client.println("normal</p>");
+        else client.println("Emergency</p>");
+        client.println("<h2>Door control</h2>");
+        if(val == HIGH) client.println("<p><button>Door Open</button></p>");
+        else client.println("<p><button>Door Close</button></p>");
+        client.println("</html>");
+
+        delay(1);
+        Serial.println("클라이언트 연결 종료");
       }
     }
-    delay(10);
-    client.stop();
-    Serial.println("클라이언트 연결 종료");
   }
 }
