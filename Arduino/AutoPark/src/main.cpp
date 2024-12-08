@@ -25,7 +25,6 @@ int val = 0; // 센서 값
 
 int wifiStatus = WL_IDLE_STATUS; // WiFi 상태
 WiFiEspServer server(80); // HTTP 서버
-RingBuffer buf(8); //링버퍼
 
 char ssid[] = "zhenzhu"; // WiFi SSID
 char pass[] = "66666666"; // WiFi 비밀번호
@@ -39,21 +38,33 @@ void printWifiStatus() {
 }
 
 void connectToWiFi() {
-   // Wi-Fi 쉴드의 존재 확인
-  if (WiFi.status() == WL_NO_SHIELD) {
-    Serial.println("WiFi shield not present");
-    while (true);
+  unsigned long startAttemptTime = millis();
+  int attempt = 0; // 연결 시도 횟수
+  const int maxAttempts = 5; // 최대 시도 횟수
+
+  wifiStatus = WiFi.begin(ssid, pass); // 초기 WiFi 연결 시도
+
+  while (wifiStatus != WL_CONNECTED) {
+    if (millis() - startAttemptTime > 10000) { // 10초 경과 시
+      attempt++;
+      Serial.print("WiFi 연결 실패, 시도 횟수: ");
+      Serial.println(attempt);
+      if (attempt < maxAttempts) {
+        Serial.println("5초 후 재시도...");
+        delay(5000); // 5초 대기
+        wifiStatus = WiFi.begin(ssid, pass); // 다시 연결 시도
+      } else {
+        Serial.println("최대 시도 횟수 초과. WiFi 연결 실패.");
+        break; // 최대 시도 횟수 초과 시 루프 종료
+      }
+      startAttemptTime = millis(); // 시작 시간 재설정
+    }
   }
 
-  // Wi-Fi 연결 시도
-  while (status != WL_CONNECTED) {
-    Serial.print("Attempting to connect to WPA SSID: ");
-    Serial.println(ssid);
-    status = WiFi.begin(ssid, pass);
+  if (wifiStatus == WL_CONNECTED) {
+    Serial.println("WiFi 연결 성공");
+    printWifiStatus();
   }
-
-  Serial.println("WiFi 연결 성공");
-  printWifiStatus();
 }
 
 void displayEmergencyMessage() {
@@ -77,6 +88,79 @@ void sensing() {
   delay(1000);
 }
 
+String getStatusMessage(int statusCode) {
+  switch (statusCode) {
+    case 200: return "OK";
+    case 404: return "Not Found";
+    case 405: return "Method Not Allowed";
+    default: return "Unknown Status";
+  }
+}
+
+void sendResponse(WiFiEspClient client, int statusCode, String message) {
+  client.print("HTTP/1.1 " + String(statusCode) + " " + getStatusMessage(statusCode) + "\r\n");
+  client.print("Content-Type: text/plain\r\n");
+  client.print("Connection: close\r\n");
+  client.print("\r\n");
+  client.print(message);
+}
+
+
+void sendHTMLResponse(WiFiEspClient client) {
+  client.print("HTTP/1.1 301 Moved Permanently\r\n");
+  client.print("Location: https://github.com/zhenzhu-kang/BibleAutoPark/blob/8c16895c0cefa2adc0fc0d2f59b3773e79713c0f/code/index.html\r\n"); // GitHub Pages URL
+  client.print("Connection: close\r\n");
+  client.print("\r\n");
+}
+
+void sendJSONResponse(WiFiEspClient client) {
+  client.print("HTTP/1.1 200 OK\r\n");
+  client.print("Content-Type: application/json\r\n");
+  client.print("Connection: close\r\n");
+  client.print("\r\n");
+
+  client.print("{");
+  client.print("\"maxspot\": ");
+  client.print(maxspot);
+  client.print(", ");
+  client.print("\"carspot\": ");
+  client.print(carspot);
+  client.print(", ");
+  client.print("\"status\": \"");
+
+  // 비상 상태에 따른 조건
+  if (val == HIGH) {
+    client.print("비상");  // 비상 상태
+  } else {
+    client.print("정상");  // 정상 상태
+  }
+
+  client.print("\"");
+  client.print("}");
+}
+
+void handleHTTPRequests(String request, WiFiEspClient client) {
+  Serial.println("수신된 요청: " + request); // 수신된 요청 로그
+
+  // 요청 메소드 확인
+  if (request.indexOf("GET") != -1) {
+    if (request.indexOf("GET /open") != -1) {
+      Serial.println("문 열림 요청 수신");
+      digitalWrite(LED[2], HIGH); // 문 열림 LED 켜기
+      sendResponse(client, 200, "문이 열렸습니다."); // 200 OK 응답
+    } else if (request.indexOf("GET /close") != -1) {
+      Serial.println("문 닫힘 요청 수신");
+      digitalWrite(LED[2], LOW); // 문 닫힘 LED 끄기
+      sendResponse(client, 200, "문이 닫혔습니다."); // 200 OK 응답
+    } else if (request.indexOf("GET /status") != -1) {
+      sendJSONResponse(client); // JSON 응답을 보내는 함수 호출
+    } else {
+      sendResponse(client, 404, "잘못된 요청입니다."); // 404 Not Found 응답
+    }
+  } else {
+    sendResponse(client, 405, "허용되지 않은 메소드입니다."); // 405 Method Not Allowed 응답
+  }
+}
 
 //LCD_메뉴선택 함수
 void wellCome(){
@@ -270,113 +354,6 @@ void setup() {
   lcd.clear();
 }
 
-void sendHtml(WiFiEspClient client, String url){
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-type:text/html");
-  client.println();
-  String html = "";
-
-  html += "<html><script src=\"http://www.w3schools.com/lib/w3data.js\"></script>";
-  html += "<body><div w3-include-html=\""+url+"\"></div>";
-  html += "<script>w3IncludeHTML();</script></body></html>";
-
-  client.println(html);
-  client.println();
-
-}
-
-void handleHTTP() {
-  WiFiEspClient client = server.available();
-  if (client) {
-    Serial.println("New client");             // print a message out the serial port
-    buf.init();                               // initialize the circular buffer
-    while (client.connected()) {              // loop while the client's connected
-      if (client.available()) {               // if there's bytes to read from the client,
-        char c = client.read();               // read a byte, then
-        buf.push(c); 
-        if (buf.endsWith("\r\n\r\n") || buf.endsWith("GET /H")) {
-          sendHtml(client,"https://raw.githubusercontent.com/zhenzhu-kang/BibleAutoPark/refs/heads/main/code/index.html");
-          break;
-        }
-
-
-
-        if (buf.endsWith("GET /M")) {
-
-            client.println("<html><body><h1>LIGHT MONITORING</h1>"); 
-
-            light = analogRead(LIGHT_PIN);
-
-            client.println("<p>light="+String(light)+"</p>"); 
-
-            client.println("<p><a href=\"/H\">HOME</a></p></body></html>");
-
-            break;
-
-            
-
-        }
-
-        
-
-        if (buf.endsWith("GET /L")) {
-
-            client.println("<html><body><h1>Led on/off</h1>"); 
-
-            if(ledStatus) client.println("<p><a href=\"/F\">LED ON</a></p>"); 
-
-            else  client.println("<p><a href=\"/N\">LED OFF</a></p>"); 
-
-            client.println("<p><a href=\"/H\">HOME</a></p></body></html>");
-
-            break;
-
-        }
-
-
-
-        if (buf.endsWith("GET /N")) {
-
-          Serial.println("Turn led ON");
-
-          ledStatus = HIGH;
-
-          digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
-
-          client.println("<html><body><h1>Led on/off</h1>"); 
-
-          client.println("<p><a href=\"/F\">LED ON</a></p>"); 
-
-          client.println("<p><a href=\"/H\">HOME</a></p></body></html>");
-
-            break;
-
-        }
-
-       if (buf.endsWith("GET /F")) {
-
-          Serial.println("Turn led OFF");
-
-          ledStatus = LOW;
-
-          digitalWrite(LED_BUILTIN, LOW);    // turn the LED off by making the voltage LOW
-
-           client.println("<html><body><h1>Led on/off</h1>"); 
-
-            client.println("<p><a href=\"/N\">LED OFF</a></p>"); 
-
-            client.println("<p><a href=\"/H\">HOME</a></p></body></html>");
-
-            break;
-        }
-      }
-    }
-    // close the connection
-    client.stop();
-    Serial.println("Client disconnected");
-  }
-}
-
 void loop() {
   inPut(); // 사용자 입력 처리
 
@@ -401,6 +378,23 @@ void loop() {
   if (status == 1 && inputKey == 'D') inCar2();
   if (status == 2 && inputKey == 'D') outCar2();
 
+  // HTTP 요청 처리
+  WiFiEspClient client = server.available();
+  if (client) {
+    String request = "";
+    while (client.connected()) {
+      if (client.available()) {
+        char c = client.read();
+        request += c;
 
-  handleHTTP();
+        if (c == '\n' && request.endsWith("\r\n\r\n")) {
+          handleHTTPRequests(request, client);
+          break;
+        }
+      }
+    }
+    delay(10);
+    client.stop();
+    Serial.println("클라이언트 연결 종료");
+  }
 }
