@@ -6,7 +6,7 @@ async function fetchParkingData() {
     const data = await response.json();
 
     // 데이터 표시
-    document.getElementById('current-parking').innerText = data.maxspot - data.carspot;
+    document.getElementById('current-parking').innerText = data.maxspot;
     document.getElementById('available-spots').innerText = data.carspot;
     document.getElementById('status-text').innerText = data.status; // 상태 텍스트 업데이트
   } catch (error) {
