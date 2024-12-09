@@ -17,7 +17,7 @@ char inputKey; // 키보드 입력값 저장
 const int sensor = 9; // 적외선 센서 핀
 int val = 0; // 센서 값
 
-RingBuffer buf(8);
+RingBuffer buf(64);
 
 SoftwareSerial EspSerial(2, 3); // RX, TX 핀 설정
 char ssid[] = "zhenzhu"; // WiFi SSID
@@ -116,6 +116,7 @@ void inCar2(){
     for(int i=0; i<maxspot; i++){
       if(!cars[i]){
         cars[i] = i+1;
+        carspot -=1;
         break;
       }
       
@@ -133,12 +134,12 @@ void inCar2(){
     
     digitalWrite(LED[0],0);
   	for(int i=0;i<5;i++){
-      digitalWrite(LED[1],1);
+      digitalWrite(LED[0],1);
       delay(500);
-      digitalWrite(LED[1],0);
+      digitalWrite(LED[0],0);
+      delay(500);
   	}
-  	digitalWrite(LED[1],1);
-  	carspot -=1;
+  	
     status = 3;
 }
 
@@ -167,6 +168,7 @@ void outCar2(){
          cars[i] = 0; 
          lcd.setCursor(0,0);
          lcd.print("Bye Bye");
+         carspot +=1;
          break;      
        }    
        else {       
@@ -180,18 +182,19 @@ void outCar2(){
     
     digitalWrite(LED[0],0);
     for(int i=0;i<5;i++){
-      digitalWrite(LED[1],1);
+      digitalWrite(LED[0],1);
       delay(500);
-      digitalWrite(LED[1],0);
+      digitalWrite(LED[0],0);
+      delay(500);
   	}
-  	digitalWrite(LED[1],1);
-  	carspot +=1;
+  	
+    status = 3;
 }
 
 //키보드 입력 값 받는 함수
 void inPut(){
   inputKey = Serial.read();
-
+  
   //자동차 번호 입력 
   if('0' <=inputKey && inputKey <='9'){
     Serial.println(inputKey);
@@ -209,6 +212,7 @@ void inPut(){
 	
   //초기화 (처음화면으로 돌아가기)
   if(inputKey =='B' && status == 3){
+    Serial.println(inputKey);
     for(int i=0;i<4;i++) {carNum[i]=' ';}
     cursor = 0;  
     status = 0;
@@ -217,17 +221,18 @@ void inPut(){
   
   //번호 한칸 지우기
   if(inputKey =='C'){
+    Serial.println(inputKey);
     cursor--;
     carNum[cursor]=' ';
     lcd.setCursor(cursor,1);
     lcd.print(' '); 
   } 
 }
-
+//                                                                                        192.168.237.216
 void setup() {
  // LED 핀을 출력 모드로 설정
-  for (int i = 0; i < 2; i++) pinMode(LED[i], OUTPUT);
-  for (int i = 0; i < 2; i++) analogWrite(LED[i], 0); // LED 초기화 (꺼진 상태)
+  for (int i = 0; i < 3; i++) pinMode(LED[i], OUTPUT);
+  for (int i = 0; i < 3; i++) analogWrite(LED[i], 0); // LED 초기화 (꺼진 상태)
 
   // 차량 번호 초기화 (공백으로 설정)
   for (int i = 0; i < 4; i++) carNum[i] = ' ';
@@ -250,6 +255,7 @@ void setup() {
   lcd.init();
   lcd.backlight();
   lcd.clear();
+  buf.init();  
 }
 
 
@@ -272,52 +278,49 @@ void loop() {
 
   sensing(); // 센서 상태 확인
 
-  // 상태별 동작
-  if (status == 0) wellCome();
-  if (status == 1 && inputKey == 'D') inCar2();
-  if (status == 2 && inputKey == 'D') outCar2();
+  WiFiEspClient client = server.available();
+  if (client) {
+    Serial.println("클라이언트 연결");
 
-  WiFiEspClient client = server.available(); // 클라이언트 연결 확인
-
-  if (client) {           // loop while the client's connected                               // if you get a client,
-    Serial.println("New client");             // print a message out the serial port
-    buf.init();                               // initialize the circular buffer
-    while (client.connected()) {              // loop while the client's connected
-      if (client.available()) {               // if there's bytes to read from the client,
-        char c = client.read();               // read a byte, then
-        buf.push(c);                          // push it to the ring buffer
-        // HTML 페이지 응답
-        client.print(
-          "HTTP/1.1 200 OK\r\n"
-          "Content-Type: text/html\r\n"
-          "Connection: close\r\n"  
-          "Refresh: 20\r\n"        // refresh the page automatically every 20 se
-          "\r\n");
-        client.println("<!DOCTYPE HTML>");
-        client.println("<html>");
-        client.println("<meta http-equiv=\"refresh\" content=\"3\">");
-        client.println("<h1>Parking Tower</h1>");
-        client.println("<h2>Monitoring</h2>");
-        client.println("<p>Parked vehicle:");
-        client.println(maxspot); 
-        client.println("ea</p>");
-        client.println("<p>Parking available:");
-        client.println(carspot); 
-        client.println("ea</p>");
-        client.println("<p>situation:");
-        if(val == HIGH) client.println("Emergency</p>");
-        else client.println("normal</p>");
-        client.println("<h2>Door control</h2>");
-        if(val == HIGH) {
-          client.println("<p><a href=/D><button>Door Open</a></button></p>");
-           if (buf.endsWith("GET /M")) val == LOW;
-        }
-        else client.println("<p><button>Door Close</button></p>");
-        client.println("</html>");
-
-        delay(1);
-        Serial.println("클라이언트 연결 종료");
-      }
+    while (client.available()) {
+      char c = client.read();               // read a byte, then
+      buf.push(c);
+      Serial.println(c);
     }
+    
+
+    // 요청 처리
+    if (buf.endsWith("GET /open") >= 0) {
+      digitalWrite(LED[2], HIGH);
+    } 
+    
+    else if (buf.endsWith("GET /close") >= 0) {
+      digitalWrite(LED[2], LOW);
+    }
+
+    // HTML 응답
+    client.print(
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html\r\n"
+        "Connection: close\r\n\r\n");
+
+    client.println("<!DOCTYPE HTML>");
+    client.println("<html>");
+    client.println("<head><title>Parking Tower</title></head>");
+    client.println("<body>");
+    client.println("<h1>Parking Tower</h1>");
+	  client.println("<h2>Monitoring</h2>");
+    client.println("<p>Parked vehicle: " + String(maxspot - carspot) + "ea</p>");
+    client.println("<p>Parking available: " + String(carspot) + "ea</p>");
+    client.println("<p>situation: " + String(val == HIGH ? "Emergency" : "normal") + "</p>");
+    client.println("<h2>Door control</h2>");
+    client.println("<p><a href=\"/open\"><button>Door Open</button></a></p>");
+    client.println("<p><a href=\"/close\"><button>Door Close</button></a></p>");
+    client.println("</body>");
+    client.println("</html>");
+
+    delay(1);
+    client.stop();
+    Serial.println("클라이언트 연결 종료");
   }
 }
